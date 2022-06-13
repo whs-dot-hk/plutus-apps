@@ -19,15 +19,15 @@ main = defaultMain tests
 
 tests :: TestTree
 tests = testGroup "plutus-contract" [
-    Spec.Contract.tests,
-    Spec.Emulator.tests,
-    Spec.State.tests,
-    Spec.Rows.tests,
-    Spec.ThreadToken.tests,
-    Spec.TimeValidity.tests,
-    Spec.Secrets.tests,
-    Spec.ErrorChecking.tests,
-    Spec.Plutus.Contract.Wallet.tests,
-    Spec.Plutus.Contract.Oracle.tests,
-    Spec.Balancing.tests
+    Spec.Contract.tests
+    -- Spec.Emulator.tests,
+    -- Spec.State.tests,
+    -- Spec.Rows.tests,
+    -- Spec.ThreadToken.tests,
+    -- Spec.TimeValidity.tests,
+    -- Spec.Secrets.tests,
+    -- Spec.ErrorChecking.tests,
+    -- Spec.Plutus.Contract.Wallet.tests,
+    -- Spec.Plutus.Contract.Oracle.tests,
+    -- Spec.Balancing.tests
     ]
