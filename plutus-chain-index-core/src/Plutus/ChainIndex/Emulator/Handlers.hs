@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns      #-}
 {-# LANGUAGE DeriveAnyClass    #-}
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE DerivingVia       #-}
@@ -21,7 +22,7 @@ module Plutus.ChainIndex.Emulator.Handlers(
     ) where
 
 import Control.Lens (at, ix, makeLenses, over, preview, set, to, view, (&))
-import Control.Monad (foldM)
+import Control.Monad (foldM, when)
 import Control.Monad.Freer (Eff, Member, type (~>))
 import Control.Monad.Freer.Error (Error, throwError)
 import Control.Monad.Freer.Extras.Log (LogMsg, logDebug, logError, logWarn)
@@ -44,7 +45,7 @@ import Plutus.ChainIndex.Emulator.DiskState (DiskState, addressMap, assetClassMa
 import Plutus.ChainIndex.Emulator.DiskState qualified as DiskState
 import Plutus.ChainIndex.Tx (ChainIndexTx, _ValidTx, citxOutputs)
 import Plutus.ChainIndex.TxUtxoBalance qualified as TxUtxoBalance
-import Plutus.ChainIndex.Types (ChainSyncBlock (..), Diagnostics (..), Point (PointAtGenesis), Tip (..),
+import Plutus.ChainIndex.Types (ChainSyncBlock (..), Depth (..), Diagnostics (..), Point (PointAtGenesis), Tip (..),
                                 TxProcessOption (..), TxUtxoBalance (..))
 import Plutus.ChainIndex.UtxoState (InsertUtxoSuccess (..), RollbackResult (..), UtxoIndex, tip, utxoState)
 import Plutus.ChainIndex.UtxoState qualified as UtxoState
@@ -52,6 +53,8 @@ import Plutus.V1.Ledger.Api (Credential (PubKeyCredential, ScriptCredential), Mi
                              MintingPolicyHash (MintingPolicyHash), StakeValidator (StakeValidator),
                              StakeValidatorHash (StakeValidatorHash), Validator (Validator),
                              ValidatorHash (ValidatorHash))
+
+import Debug.Trace
 
 data ChainIndexEmulatorState =
     ChainIndexEmulatorState
@@ -178,6 +181,8 @@ appendBlocks [] = pure ()
 appendBlocks blocks = do
     let
         processBlock (utxoIndexState, txs) (Block tip_ transactions) = do
+            -- if null transactions then return (utxoIndexState, txs)
+            -- else do
             case UtxoState.insert (TxUtxoBalance.fromBlock tip_ (map fst transactions)) utxoIndexState of
                 Left err -> do
                     let reason = InsertionFailed err
@@ -187,11 +192,25 @@ appendBlocks blocks = do
                     logDebug $ InsertionSuccess tip_ insertPosition
                     return (newIndex, transactions ++ txs)
     oldState <- get @ChainIndexEmulatorState
+    let oldIndex = view utxoIndex oldState
     (newIndex, transactions) <- foldM processBlock (view utxoIndex oldState, []) blocks
-    put $ oldState
-            & set utxoIndex newIndex
-            & over diskState
-                (mappend $ foldMap (\(tx, opt) -> if tpoStoreTx opt then DiskState.fromTx tx else mempty) transactions)
+    case UtxoState.reduceBlockCount (Depth 2160) newIndex of
+      UtxoState.BlockCountNotReduced -> do
+        put $ oldState
+                & set utxoIndex newIndex
+                & over diskState
+                    (mappend $ foldMap (\(tx, opt) -> if tpoStoreTx opt then DiskState.fromTx tx else mempty) transactions)
+      lbcResult -> do
+        put $ oldState
+                & set utxoIndex (UtxoState.reducedIndex lbcResult)
+                & over diskState
+                    (mappend $ foldMap (\(tx, opt) -> if tpoStoreTx opt then DiskState.fromTx tx else mempty) transactions)
+
+    -- when (newIndex /= oldIndex) $
+    --     put $ oldState
+    --             & set utxoIndex newIndex
+    --             & over diskState
+    --                 (mappend $ foldMap (\(tx, opt) -> if tpoStoreTx opt then DiskState.fromTx tx else mempty) transactions)
 
 handleControl ::
     forall effs.
@@ -202,8 +221,8 @@ handleControl ::
     => ChainIndexControlEffect
     ~> Eff effs
 handleControl = \case
-    AppendBlocks blocks -> appendBlocks blocks
-    Rollback tip_ -> do
+    AppendBlocks blocks -> {-# SCC append_blocks #-} appendBlocks blocks
+    Rollback tip_ -> {-# SCC rollback #-} do
         oldState <- get @ChainIndexEmulatorState
         case TxUtxoBalance.rollback tip_ (view utxoIndex oldState) of
             Left err -> do
@@ -217,7 +236,7 @@ handleControl = \case
     ResumeSync _ ->
         -- The emulator can only resume from genesis.
         throwError ResumeNotSupported
-    CollectGarbage -> do
+    CollectGarbage -> {-# SCC collect_garbage #-} do
         -- Rebuild the index using only transactions that still have at
         -- least one output in the UTXO set
         utxos <- gets $
