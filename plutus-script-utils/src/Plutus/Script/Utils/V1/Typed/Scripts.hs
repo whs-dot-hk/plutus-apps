@@ -42,8 +42,7 @@ import Plutus.V1.Ledger.Api (Credential (PubKeyCredential, ScriptCredential), Da
                              Redeemer (Redeemer), StakeValidator, ToData (..),
                              TxOut (TxOut, txOutAddress, txOutDatumHash, txOutValue), TxOutRef, Validator, Value,
                              addressCredential)
-import Plutus.V1.Ledger.Tx (TxIn (TxIn, txInRef, txInType),
-                            TxInType (ConsumePublicKeyAddress, ConsumeScriptAddress, ConsumeSimpleScriptAddress))
+import Plutus.V1.Ledger.Tx (TxIn (TxIn, txInType), TxInType (ConsumePublicKeyAddress, ConsumeScriptAddress))
 
 {- Note [Scripts returning Bool]
 It used to be that the signal for validation failure was a script being `error`. This is nice for
