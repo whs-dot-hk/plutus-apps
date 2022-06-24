@@ -194,23 +194,12 @@ appendBlocks blocks = do
     oldState <- get @ChainIndexEmulatorState
     let oldIndex = view utxoIndex oldState
     (newIndex, transactions) <- foldM processBlock (view utxoIndex oldState, []) blocks
-    case UtxoState.reduceBlockCount (Depth 2160) newIndex of
-      UtxoState.BlockCountNotReduced -> do
+    -- This check reduces the emulator's memory consumption by 75%
+    when (newIndex /= oldIndex) $
         put $ oldState
                 & set utxoIndex newIndex
                 & over diskState
                     (mappend $ foldMap (\(tx, opt) -> if tpoStoreTx opt then DiskState.fromTx tx else mempty) transactions)
-      lbcResult -> do
-        put $ oldState
-                & set utxoIndex (UtxoState.reducedIndex lbcResult)
-                & over diskState
-                    (mappend $ foldMap (\(tx, opt) -> if tpoStoreTx opt then DiskState.fromTx tx else mempty) transactions)
-
-    -- when (newIndex /= oldIndex) $
-    --     put $ oldState
-    --             & set utxoIndex newIndex
-    --             & over diskState
-    --                 (mappend $ foldMap (\(tx, opt) -> if tpoStoreTx opt then DiskState.fromTx tx else mempty) transactions)
 
 handleControl ::
     forall effs.
