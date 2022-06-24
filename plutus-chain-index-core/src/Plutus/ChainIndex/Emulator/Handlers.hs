@@ -45,7 +45,7 @@ import Plutus.ChainIndex.Emulator.DiskState (DiskState, addressMap, assetClassMa
 import Plutus.ChainIndex.Emulator.DiskState qualified as DiskState
 import Plutus.ChainIndex.Tx (ChainIndexTx, _ValidTx, citxOutputs)
 import Plutus.ChainIndex.TxUtxoBalance qualified as TxUtxoBalance
-import Plutus.ChainIndex.Types (ChainSyncBlock (..), Depth (..), Diagnostics (..), Point (PointAtGenesis), Tip (..),
+import Plutus.ChainIndex.Types (ChainSyncBlock (..), Diagnostics (..), Point (PointAtGenesis), Tip (..),
                                 TxProcessOption (..), TxUtxoBalance (..))
 import Plutus.ChainIndex.UtxoState (InsertUtxoSuccess (..), RollbackResult (..), UtxoIndex, tip, utxoState)
 import Plutus.ChainIndex.UtxoState qualified as UtxoState
@@ -53,8 +53,6 @@ import Plutus.V1.Ledger.Api (Credential (PubKeyCredential, ScriptCredential), Mi
                              MintingPolicyHash (MintingPolicyHash), StakeValidator (StakeValidator),
                              StakeValidatorHash (StakeValidatorHash), Validator (Validator),
                              ValidatorHash (ValidatorHash))
-
-import Debug.Trace
 
 data ChainIndexEmulatorState =
     ChainIndexEmulatorState
@@ -181,8 +179,6 @@ appendBlocks [] = pure ()
 appendBlocks blocks = do
     let
         processBlock (utxoIndexState, txs) (Block tip_ transactions) = do
-            -- if null transactions then return (utxoIndexState, txs)
-            -- else do
             case UtxoState.insert (TxUtxoBalance.fromBlock tip_ (map fst transactions)) utxoIndexState of
                 Left err -> do
                     let reason = InsertionFailed err
