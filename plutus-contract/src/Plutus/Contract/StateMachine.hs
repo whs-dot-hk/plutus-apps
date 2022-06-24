@@ -52,7 +52,7 @@ module Plutus.Contract.StateMachine(
     , Void
     ) where
 
-import Control.Lens (makeClassyPrisms, review)
+import Control.Lens (_Right, makeClassyPrisms, review, (^?))
 import Control.Monad (unless)
 import Control.Monad.Error.Lens
 import Data.Aeson (FromJSON, ToJSON)
@@ -76,8 +76,6 @@ import Ledger.Constraints.TxConstraints (ScriptInputConstraint (ScriptInputConst
                                          txOwnOutputs)
 import Ledger.Tx qualified as Tx
 import Ledger.Typed.Scripts qualified as Scripts
-import Ledger.Typed.Tx (TypedScriptTxOut (TypedScriptTxOut, tyTxOutData, tyTxOutTxOut))
-import Ledger.Typed.Tx qualified as Typed
 import Ledger.Value qualified as Value
 import Plutus.ChainIndex (ChainIndexTx (_citxInputs))
 import Plutus.Contract (AsContractError (_ConstraintResolutionContractError, _ContractError), Contract, ContractError,
@@ -93,6 +91,8 @@ import Plutus.Contract.StateMachine.OnChain qualified as SM
 import Plutus.Contract.StateMachine.ThreadToken (ThreadToken (ThreadToken), curPolicy, ttOutRef)
 import Plutus.Contract.Wallet (getUnspentOutput)
 import Plutus.Script.Utils.V1.Scripts (scriptCurrencySymbol)
+import Plutus.Script.Utils.V1.Typed.Scripts (TypedScriptTxOut (TypedScriptTxOut, tyTxOutData, tyTxOutTxOut))
+import Plutus.Script.Utils.V1.Typed.Scripts qualified as Typed
 import Plutus.V1.Ledger.Api qualified as Ledger
 import PlutusTx qualified
 import PlutusTx.Monoid (inv)
@@ -137,9 +137,14 @@ getStates
     -> Map Tx.TxOutRef Tx.ChainIndexTxOut
     -> [OnChainState s i]
 getStates (SM.StateMachineInstance _ si) refMap =
-    let lkp (ref, out) = do
-            ocsTxOutRef <- Typed.typeScriptTxOutRef (\r -> Map.lookup r refMap) si ref
-            ocsTxOut <- Typed.typeScriptTxOut si ref out
+    -- FIXME refactor
+    let txOutRefLookup txOutRef = do
+          ciTxOut <- Map.lookup txOutRef refMap
+          datum <- ciTxOut ^? Tx.ciTxOutDatum . _Right
+          pure (Tx.toTxOut ciTxOut, datum)
+        lkp (ref, _out) = do
+            ocsTxOutRef <- Typed.typeScriptTxOutRef txOutRefLookup si ref
+            let ocsTxOut = Typed.tyTxOutRefOut ocsTxOutRef
             pure OnChainState{ocsTxOut, ocsTxOutRef}
     in rights $ fmap lkp $ Map.toList refMap
 
