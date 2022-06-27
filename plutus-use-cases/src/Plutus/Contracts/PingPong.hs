@@ -40,7 +40,7 @@ import GHC.Generics (Generic)
 import Ledger.Ada qualified as Ada
 import Ledger.Constraints (TxConstraints)
 import Ledger.Typed.Scripts qualified as Scripts
-import Ledger.Typed.Tx (TypedScriptTxOut (..))
+import Plutus.Script.Utils.V1.Typed.Scripts (TypedScriptTxOut (..))
 import PlutusTx qualified
 import PlutusTx.Prelude hiding (Applicative (..), check)
 
