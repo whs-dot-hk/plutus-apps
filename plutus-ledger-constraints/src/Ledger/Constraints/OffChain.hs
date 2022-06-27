@@ -99,7 +99,8 @@ import Ledger.Tx (ChainIndexTxOut, RedeemerPtr (RedeemerPtr), ScriptTag (Mint), 
                   TxOut (txOutAddress, txOutDatumHash, txOutValue), TxOutRef)
 import Ledger.Tx qualified as Tx
 import Ledger.Tx.CardanoAPI qualified as C
-import Ledger.Typed.Scripts (Any, TypedValidator, ValidatorTypes (DatumType, RedeemerType))
+import Ledger.Typed.Scripts (Any, ConnectionError (UnknownRef), TypedValidator,
+                             ValidatorTypes (DatumType, RedeemerType))
 import Ledger.Typed.Scripts qualified as Scripts
 import Ledger.Validation (evaluateMinLovelaceOutput, fromPlutusTxOutUnsafe)
 import Plutus.Script.Utils.V1.Scripts (datumHash, mintingPolicyHash, validatorHash)
@@ -491,14 +492,15 @@ addOwnInput
 addOwnInput ScriptInputConstraint{icRedeemer, icTxOutRef} = do
     ScriptLookups{slTxOutputs, slTypedValidator} <- ask
     inst <- maybe (throwError TypedValidatorMissing) pure slTypedValidator
-    let txOutRefLookup txOutRef = do
-          ciTxOut <- Map.lookup txOutRef slTxOutputs
-          datum <- ciTxOut ^? Tx.ciTxOutDatum . _Right
-          pure (Tx.toTxOut ciTxOut, datum)
     typedOutRef <-
-        either (throwError . TypeCheckFailed) pure
-        $ runExcept @Typed.ConnectionError
-        $ Typed.typeScriptTxOutRef txOutRefLookup inst icTxOutRef
+      either (throwError . TypeCheckFailed) pure
+      $ runExcept @Typed.ConnectionError
+      $ do
+          (txOut, datum) <- maybe (throwError UnknownRef) pure $ do
+                                ciTxOut <- Map.lookup icTxOutRef slTxOutputs
+                                datum <- ciTxOut ^? Tx.ciTxOutDatum . _Right
+                                pure (Tx.toTxOut ciTxOut, datum)
+          Typed.typeScriptTxOutRef inst icTxOutRef txOut datum
     let txIn = Typed.makeTypedScriptTxIn inst icRedeemer typedOutRef
         vl   = Tx.txOutValue $ Typed.tyTxOutTxOut $ Typed.tyTxOutRefOut typedOutRef
     unbalancedTx . tx . Tx.inputs %= Set.insert (Typed.tyTxInTxIn txIn)

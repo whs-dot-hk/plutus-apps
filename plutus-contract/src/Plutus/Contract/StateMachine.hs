@@ -55,6 +55,7 @@ module Plutus.Contract.StateMachine(
 import Control.Lens (_Right, makeClassyPrisms, review, (^?))
 import Control.Monad (unless)
 import Control.Monad.Error.Lens
+import Control.Monad.Except (throwError)
 import Data.Aeson (FromJSON, ToJSON)
 import Data.Either (rights)
 import Data.Map (Map)
@@ -137,16 +138,12 @@ getStates
     -> Map Tx.TxOutRef Tx.ChainIndexTxOut
     -> [OnChainState s i]
 getStates (SM.StateMachineInstance _ si) refMap =
-    -- FIXME refactor
-    let txOutRefLookup txOutRef = do
-          ciTxOut <- Map.lookup txOutRef refMap
-          datum <- ciTxOut ^? Tx.ciTxOutDatum . _Right
-          pure (Tx.toTxOut ciTxOut, datum)
-        lkp (ref, _out) = do
-            ocsTxOutRef <- Typed.typeScriptTxOutRef txOutRefLookup si ref
-            let ocsTxOut = Typed.tyTxOutRefOut ocsTxOutRef
-            pure OnChainState{ocsTxOut, ocsTxOutRef}
-    in rights $ fmap lkp $ Map.toList refMap
+    rights $ flip map (Map.toList refMap) $ \(txOutRef, ciTxOut) -> do
+      let txOut = Tx.toTxOut ciTxOut
+      datum <- maybe (throwError Typed.UnknownRef) pure $ ciTxOut ^? Tx.ciTxOutDatum . _Right
+      ocsTxOutRef <- Typed.typeScriptTxOutRef si txOutRef txOut datum
+      let ocsTxOut = Typed.tyTxOutRefOut ocsTxOutRef
+      pure OnChainState{ocsTxOut, ocsTxOutRef}
 
 -- | An invalid transition
 data InvalidTransition s i =
