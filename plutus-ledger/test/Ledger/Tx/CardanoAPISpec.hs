@@ -10,7 +10,7 @@ import Cardano.Api (AsType (AsPaymentKey, AsStakeKey), Key (verificationKeyHash)
                     shelleyAddressInEra)
 import Cardano.Api.Shelley (StakeCredential (StakeCredentialByKey))
 import Ledger ()
-import Ledger.Tx.CardanoAPI (fromCardanoAddress, toCardanoAddress)
+import Ledger.Tx.CardanoAPI (fromCardanoAddressInEra, toCardanoAddressInEra)
 
 import Gen.Cardano.Api.Typed qualified as Gen
 import Hedgehog (Gen, Property, forAll, property, (===))
@@ -33,10 +33,10 @@ addressRoundTripSpec = property $ do
     shelleyAddr <- shelleyAddressInEra
                <$> forAll (makeShelleyAddress networkId <$> genPaymentCredential
                                                         <*> genStakeAddressReference)
-    case fromCardanoAddress shelleyAddr of
+    case fromCardanoAddressInEra shelleyAddr of
         Left _ -> Hedgehog.assert False
         Right plutusAddr ->
-            case toCardanoAddress networkId plutusAddr of
+            case toCardanoAddressInEra networkId plutusAddr of
                 Left _      -> Hedgehog.assert False
                 Right cAddr -> cAddr === shelleyAddr
 
