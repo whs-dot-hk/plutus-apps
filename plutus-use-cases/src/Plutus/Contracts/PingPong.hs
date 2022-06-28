@@ -40,7 +40,6 @@ import GHC.Generics (Generic)
 import Ledger.Ada qualified as Ada
 import Ledger.Constraints (TxConstraints)
 import Ledger.Typed.Scripts qualified as Scripts
-import Plutus.Script.Utils.V1.Typed.Scripts (TypedScriptTxOut (..))
 import PlutusTx qualified
 import PlutusTx.Prelude hiding (Applicative (..), check)
 
@@ -124,10 +123,9 @@ run ::
     -> Promise w PingPongSchema PingPongError ()
     -> Contract w PingPongSchema PingPongError ()
 run expectedState action = do
-    let extractState = tyTxOutData . SM.ocsTxOut
-        go Nothing = throwError StoppedUnexpectedly
+    let go Nothing = throwError StoppedUnexpectedly
         go (Just currentState)
-            | extractState currentState == expectedState = awaitPromise action
+            | SM.getStateData currentState == expectedState = awaitPromise action
             | otherwise = runWaitForUpdate >>= go
     maybeState <- SM.getOnChainState client
     let datum = fmap fst maybeState
@@ -158,9 +156,9 @@ combined = forever (selectList [initialise, ping, pong, runStop, wait]) where
         newState <- runWaitForUpdate
         case newState of
             Nothing -> logWarn @Haskell.String "runWaitForUpdate: Nothing"
-            Just SM.OnChainState{SM.ocsTxOut} -> do
-                logInfo $ "new state: " <> Haskell.show (tyTxOutData ocsTxOut)
-                tell (Last $ Just $ tyTxOutData ocsTxOut)
+            Just ocs -> do
+                logInfo $ "new state: " <> Haskell.show (SM.getStateData ocs)
+                tell (Last $ Just $ SM.getStateData ocs)
 
 simplePingPongAuto :: Contract (Last PingPongState) PingPongSchema PingPongError ()
 simplePingPongAuto = do

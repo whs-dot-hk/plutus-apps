@@ -45,7 +45,6 @@ import Plutus.Contract.StateMachine (State (..), StateMachine (..), StateMachine
                                      WaitingResult (..))
 import Plutus.Contract.StateMachine qualified as SM
 import Plutus.Contract.Util (loopM)
-import Plutus.Script.Utils.V1.Typed.Scripts (TypedScriptTxOut (..))
 import PlutusTx qualified
 import PlutusTx.Code
 import PlutusTx.Coverage
@@ -243,11 +242,13 @@ auctionSeller value time = do
 currentState
     :: StateMachineClient AuctionState AuctionInput
     -> Contract AuctionOutput BuyerSchema AuctionError (Maybe HighestBid)
-currentState client = mapError StateMachineContractError (SM.getOnChainState client) >>= \case
-    Just (SM.OnChainState{SM.ocsTxOut}, _) -> do
-      case tyTxOutData ocsTxOut of
+currentState client = do
+  mOcs <- mapError StateMachineContractError (SM.getOnChainState client)
+  case mOcs of
+    Just (ocs, _) -> do
+      case SM.getStateData ocs of
         Ongoing s -> do
-          tell $ auctionStateOut $ tyTxOutData ocsTxOut
+          tell $ auctionStateOut $ SM.getStateData ocs
           pure (Just s)
         _ -> do
           logWarn CurrentStateNotFound

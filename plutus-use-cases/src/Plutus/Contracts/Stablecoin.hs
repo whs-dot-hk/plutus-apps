@@ -95,10 +95,9 @@ import Ledger.Value (AssetClass, TokenName, Value)
 import Ledger.Value qualified as Value
 import Plutus.Contract
 import Plutus.Contract.Oracle
-import Plutus.Contract.StateMachine (AsSMContractError, OnChainState (..), SMContractError, State (..), StateMachine,
+import Plutus.Contract.StateMachine (AsSMContractError, SMContractError, State (..), StateMachine,
                                      StateMachineClient (..), Void)
 import Plutus.Contract.StateMachine qualified as SM
-import Plutus.Script.Utils.V1.Typed.Scripts (TypedScriptTxOut (..))
 import PlutusTx qualified
 import PlutusTx.Prelude
 import PlutusTx.Ratio qualified as R
@@ -416,11 +415,11 @@ checkTransition theClient sc i@Input{inpConversionRate} = do
         case checkHashOffChain inpConversionRate of
             Right Observation{obsValue} -> do
                 case currentState of
-                    Just (OnChainState{ocsTxOut}, _) -> do
-                        case checkValidState sc (tyTxOutData ocsTxOut) obsValue of
+                    Just (ocs, _) -> do
+                        case checkValidState sc (SM.getStateData ocs) obsValue of
                             Right _ -> logInfo @Haskell.String "Current state OK"
                             Left w  -> logInfo $ "Current state is invalid: " <> Haskell.show w <> ". The transition may still be allowed."
-                        case applyInput sc (tyTxOutData ocsTxOut) i of
+                        case applyInput sc (SM.getStateData ocs) i of
                             Just (_, newState) -> case checkValidState sc newState obsValue of
                                 Right _ -> logInfo @Haskell.String "New state OK"
                                 Left w  -> logWarn $ "New state is invalid: " <> Haskell.show w <> ". The transition is not allowed."
