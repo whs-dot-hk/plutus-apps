@@ -158,14 +158,14 @@ combined = forever (selectList [initialise, ping, pong, runStop, wait]) where
         newState <- runWaitForUpdate
         case newState of
             Nothing -> logWarn @Haskell.String "runWaitForUpdate: Nothing"
-            Just SM.OnChainState{SM.ocsTxOut=TypedScriptTxOut{tyTxOutData=s}} -> do
-                logInfo $ "new state: " <> Haskell.show s
-                tell (Last $ Just s)
+            Just SM.OnChainState{SM.ocsTxOut} -> do
+                logInfo $ "new state: " <> Haskell.show (tyTxOutData ocsTxOut)
+                tell (Last $ Just $ tyTxOutData ocsTxOut)
 
 simplePingPongAuto :: Contract (Last PingPongState) PingPongSchema PingPongError ()
 simplePingPongAuto = do
   logInfo @Haskell.String "Initialising PingPongAuto"
-  void $ (SM.runInitialise client Pinged (Ada.lovelaceValueOf 2))
+  void $ SM.runInitialise client Pinged (Ada.lovelaceValueOf 2)
   logInfo @Haskell.String "Waiting for PONG"
   awaitPromise pong
   logInfo @Haskell.String "Waiting for PING"

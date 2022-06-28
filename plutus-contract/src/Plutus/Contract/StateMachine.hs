@@ -55,9 +55,7 @@ module Plutus.Contract.StateMachine(
 import Control.Lens (_Right, makeClassyPrisms, review, (^?))
 import Control.Monad (unless)
 import Control.Monad.Error.Lens
-import Control.Monad.Except (throwError)
 import Data.Aeson (FromJSON, ToJSON)
-import Data.Either (fromRight)
 import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Maybe (listToMaybe, mapMaybe)
@@ -92,7 +90,7 @@ import Plutus.Contract.StateMachine.OnChain qualified as SM
 import Plutus.Contract.StateMachine.ThreadToken (ThreadToken (ThreadToken), curPolicy, ttOutRef)
 import Plutus.Contract.Wallet (getUnspentOutput)
 import Plutus.Script.Utils.V1.Scripts (scriptCurrencySymbol)
-import Plutus.Script.Utils.V1.Typed.Scripts (TypedScriptTxOut (TypedScriptTxOut, tyTxOutData, tyTxOutTxOut))
+import Plutus.Script.Utils.V1.Typed.Scripts (tyTxOutData, tyTxOutTxOut)
 import Plutus.Script.Utils.V1.Typed.Scripts qualified as Typed
 import Plutus.V1.Ledger.Api qualified as Ledger
 import PlutusTx qualified
@@ -199,7 +197,7 @@ threadTokenChooser ::
     -> [OnChainState state input]
     -> Either SMContractError (OnChainState state input)
 threadTokenChooser val states =
-    let hasToken OnChainState{ocsTxOut=TypedScriptTxOut{tyTxOutTxOut=Tx.TxOut{Tx.txOutValue}}} = val `Value.leq` txOutValue in
+    let hasToken OnChainState{ocsTxOut} = val `Value.leq` (Tx.txOutValue $ Typed.tyTxOutTxOut ocsTxOut) in
     case filter hasToken states of
         [x] -> Right x
         xs ->
@@ -327,11 +325,11 @@ waitForUpdateTimeout client@StateMachineClient{scInstance, scChooser} timeout = 
                             case scChooser produced of
                                 Left e             -> throwing _SMContractError e
                                 Right onChainState -> pure $ InitialState onChainState
-                    Just (OnChainState{ocsTxOutRef=Typed.TypedScriptTxOutRef{Typed.tyTxOutRefRef}}, _) ->
-                        promiseBind (utxoIsSpent tyTxOutRefRef) $ \txn -> do
+                    Just (OnChainState{ocsTxOutRef}, _) ->
+                        promiseBind (utxoIsSpent (Typed.tyTxOutRefRef ocsTxOutRef)) $ \txn -> do
                             outRefMap <- Map.fromList . map projectFst <$> utxosTxOutTxFromTx txn
                             let newStates = getStates @state @i scInstance outRefMap
-                                inp       = getInput tyTxOutRefRef txn
+                                inp       = getInput (Typed.tyTxOutRefRef ocsTxOutRef) txn
                             case (newStates, inp) of
                                 ([], Just i) -> pure (ContractEnded i)
                                 (xs, Just i) -> case scChooser xs of
@@ -520,11 +518,11 @@ mkStep client@StateMachineClient{scInstance} input = do
     case maybeState of
         Nothing -> pure $ Left $ InvalidTransition Nothing input
         Just (onChainState, utxo) -> do
-            let OnChainState{ocsTxOut=TypedScriptTxOut{tyTxOutData=currentState, tyTxOutTxOut}, ocsTxOutRef} = onChainState
+            let OnChainState{ocsTxOut, ocsTxOutRef} = onChainState
                 oldState = State
-                    { stateData = currentState
+                    { stateData = tyTxOutData ocsTxOut
                       -- Hide the thread token value from the client code
-                    , stateValue = Ledger.txOutValue tyTxOutTxOut <> inv (SM.threadTokenValueOrZero scInstance)
+                    , stateValue = Ledger.txOutValue (tyTxOutTxOut ocsTxOut) <> inv (SM.threadTokenValueOrZero scInstance)
                     }
                 inputConstraints = [ScriptInputConstraint{icRedeemer=input, icTxOutRef = Typed.tyTxOutRefRef ocsTxOutRef }]
 

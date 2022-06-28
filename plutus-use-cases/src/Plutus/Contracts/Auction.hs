@@ -244,9 +244,14 @@ currentState
     :: StateMachineClient AuctionState AuctionInput
     -> Contract AuctionOutput BuyerSchema AuctionError (Maybe HighestBid)
 currentState client = mapError StateMachineContractError (SM.getOnChainState client) >>= \case
-    Just (SM.OnChainState{SM.ocsTxOut=TypedScriptTxOut{tyTxOutData=Ongoing s}}, _) -> do
-        tell $ auctionStateOut $ Ongoing s
-        pure (Just s)
+    Just (SM.OnChainState{SM.ocsTxOut}, _) -> do
+      case tyTxOutData ocsTxOut of
+        Ongoing s -> do
+          tell $ auctionStateOut $ tyTxOutData ocsTxOut
+          pure (Just s)
+        _ -> do
+          logWarn CurrentStateNotFound
+          pure Nothing
     _ -> do
         logWarn CurrentStateNotFound
         pure Nothing
