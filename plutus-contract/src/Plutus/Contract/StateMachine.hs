@@ -57,7 +57,7 @@ import Control.Monad (unless)
 import Control.Monad.Error.Lens
 import Control.Monad.Except (throwError)
 import Data.Aeson (FromJSON, ToJSON)
-import Data.Either (rights)
+import Data.Either (fromRight)
 import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Maybe (listToMaybe, mapMaybe)
@@ -138,10 +138,10 @@ getStates
     -> Map Tx.TxOutRef Tx.ChainIndexTxOut
     -> [OnChainState s i]
 getStates (SM.StateMachineInstance _ si) refMap =
-    rights $ flip map (Map.toList refMap) $ \(txOutRef, ciTxOut) -> do
+    flip mapMaybe (Map.toList refMap) $ \(txOutRef, ciTxOut) -> do
       let txOut = Tx.toTxOut ciTxOut
-      datum <- maybe (throwError Typed.UnknownRef) pure $ ciTxOut ^? Tx.ciTxOutDatum . _Right
-      ocsTxOutRef <- Typed.typeScriptTxOutRef si txOutRef txOut datum
+      datum <- ciTxOut ^? Tx.ciTxOutDatum . _Right
+      ocsTxOutRef <- either (const Nothing) Just $ Typed.typeScriptTxOutRef si txOutRef txOut datum
       let ocsTxOut = Typed.tyTxOutRefOut ocsTxOutRef
       pure OnChainState{ocsTxOut, ocsTxOutRef}
 

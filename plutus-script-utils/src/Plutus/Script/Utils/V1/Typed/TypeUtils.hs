@@ -33,5 +33,3 @@ data HListF (f :: Type -> Type) (l :: [Type]) where
 hfOut :: forall o f (ts :: [Type]) . (forall a . f a -> o) -> HListF f ts -> [o]
 hfOut _ HNilF         = []
 hfOut f (HConsF e es) = f e : hfOut f es
-
-
